@@ -1,6 +1,6 @@
 import { defineMacro, defineMacroProvider } from 'vite-plugin-macro';
 import type { NodePath } from '@babel/traverse';
-import type { AssignmentExpression, VariableDeclaration, VariableDeclarator, } from '@babel/types';
+import type { AssignmentExpression, CallExpression, VariableDeclaration, VariableDeclarator, } from '@babel/types';
 
 const signalMacro = defineMacro('$signal')
   .withCustomType('import { SignalOptions } from \'solid-js/types/reactive/signal\';')
@@ -24,11 +24,11 @@ const signalMacro = defineMacro('$signal')
       return;
     }
     if (letStmt.node.kind !== 'let') {
-      throw new Error(`Should use 'let' with $ref() macro.`);
+      throw new Error(`Should use 'let' with $signal() macro.`);
     }
     if (letStmt.node.declarations.length > 1) {
       throw new Error(
-        `Please declare one variable in one let statement with $ref() macro.`
+        `Please declare one variable in one let statement with $signal() macro.`
       );
     }
 
@@ -37,7 +37,7 @@ const signalMacro = defineMacro('$signal')
       p.isVariableDeclarator()
     ) as NodePath<VariableDeclarator>;
     if (!types.isIdentifier(declExpr.node.id)) {
-      throw new Error(`Only identifier is allowed with $ref() macro.`);
+      throw new Error(`Only identifier is allowed with $signal() macro.`);
     }
     refExpr.node.callee = types.identifier(refID);
     letStmt.node.kind = 'const';
@@ -111,12 +111,77 @@ const signalMacro = defineMacro('$signal')
     });
   });
 
+const memoMacro = defineMacro('$memo')
+  .withCustomType('import { EffectFunction } from \'solid-js/types/reactive/signal\';')
+  .withSignature('<T>(value: EffectFunction<T, T>): T')
+  .withHandler(({ path }, { types }, { appendImports }) => {
+    const refExpr = path;
+    const refID = path.scope.getProgramParent().generateUid('memo');
+
+    appendImports({
+      moduleName: 'solid-js',
+      exportName: 'createMemo',
+      localName: refID,
+    });
+
+
+    const letStmt = path.findParent((p) =>
+      p.isVariableDeclaration()
+    ) as NodePath<VariableDeclaration>;
+    if (!letStmt) {
+      refExpr.node.callee = types.identifier(refID);
+      return;
+    }
+    if (letStmt.node.kind !== 'let') {
+      throw new Error(`Should use 'let' with $memo() macro.`);
+    }
+    if (letStmt.node.declarations.length > 1) {
+      throw new Error(
+        `Please declare one variable in one let statement with $memo() macro.`
+      );
+    }
+
+    // use findParent to get node path
+    const declExpr = refExpr.findParent((p) =>
+      p.isVariableDeclarator()
+    ) as NodePath<VariableDeclarator>;
+    if (!types.isIdentifier(declExpr.node.id)) {
+      throw new Error(`Only identifier is allowed with $memo() macro.`);
+    }
+    refExpr.node.callee = types.identifier(refID);
+    letStmt.node.kind = 'const';
+    const id = declExpr.node.id.name;
+
+    const idIdentifier = types.identifier(id);
+
+
+    const init = declExpr?.node?.init as CallExpression;
+    if (init?.arguments?.[0] && !types.isFunction(init.arguments[0])) {
+      init.arguments[0] = types.arrowFunctionExpression(
+        [],
+        init.arguments[0] as any,
+      );
+    }
+
+    //ArrowFunctionExpression
+
+    declExpr.scope.getBinding(id)?.referencePaths.forEach((p) => {
+      if ((p.parent as any).callee?.name != '_$insert') {
+        p.replaceWith(types.callExpression(
+          idIdentifier,
+          [],
+        ));
+      }
+    });
+
+  });
+
 export function provideRef() {
   return defineMacroProvider({
     id: 'solid-js-macro',
     exports: {
       'solid-js/macro': {
-        macros: [signalMacro],
+        macros: [signalMacro, memoMacro],
       },
     },
   });

@@ -1,13 +1,14 @@
 import type { Component } from 'solid-js';
-import { $signal } from 'solid-js/macro';
+import { $memo, $signal } from 'solid-js/macro';
 
 const App: Component = () => {
-  let points = $signal(['val']);
+  let num = $signal(0);
+  let a = $memo(num * 2);
 
   return (
     <div style={{ padding: '2em' }}>
-      {points.map(point => <p>{point}</p>)}
-      <button onClick={() => points = [...points, 'wol']}>Add</button>
+      <p>{a}</p>
+      <button onClick={() => num++}>Add</button>
     </div>
   );
 };

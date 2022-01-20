@@ -2,15 +2,14 @@ import { defineMacro, defineMacroProvider } from 'vite-plugin-macro';
 import type { NodePath } from '@babel/traverse';
 import type { AssignmentExpression, VariableDeclaration, VariableDeclarator, } from '@babel/types';
 
-const refMacro = defineMacro('$signal')
-  .withCustomType('import { Signal, SignalOptions } from \'solid-js/types/reactive/signal\';')
+const signalMacro = defineMacro('$signal')
+  .withCustomType('import { SignalOptions } from \'solid-js/types/reactive/signal\';')
   .withSignature('<T>(value: T, options?: SignalOptions<T> | undefined): T')
   .withHandler(({ path }, { types }, { appendImports }) => {
     const refExpr = path;
 
     const refID = path.scope.getProgramParent().generateUid('ref');
 
-    // add helper
     appendImports({
       moduleName: 'solid-js',
       exportName: 'createSignal',
@@ -21,22 +20,13 @@ const refMacro = defineMacro('$signal')
       p.isVariableDeclaration()
     ) as NodePath<VariableDeclaration>;
     if (!letStmt) {
-      // case:
-      // $ref(0)
-      //   then just replace with ref()
       refExpr.node.callee = types.identifier(refID);
       return;
     }
     if (letStmt.node.kind !== 'let') {
-      // case:
-      // const a = $ref(0)
-      //   then throw out Error
       throw new Error(`Should use 'let' with $ref() macro.`);
     }
     if (letStmt.node.declarations.length > 1) {
-      // case:
-      //   let a = $ref(0), b = $ref(1)
-      //   then throw out Error
       throw new Error(
         `Please declare one variable in one let statement with $ref() macro.`
       );
@@ -47,14 +37,8 @@ const refMacro = defineMacro('$signal')
       p.isVariableDeclarator()
     ) as NodePath<VariableDeclarator>;
     if (!types.isIdentifier(declExpr.node.id)) {
-      // case:
-      //   let {} = $ref(0)
-      //   then throw out Error
       throw new Error(`Only identifier is allowed with $ref() macro.`);
     }
-    // case:
-    //   let a = $ref(0)
-    //   then replace let with const, and replace all references in scope with a.value
     refExpr.node.callee = types.identifier(refID);
     letStmt.node.kind = 'const';
     const id = declExpr.node.id.name;
@@ -129,10 +113,10 @@ const refMacro = defineMacro('$signal')
 
 export function provideRef() {
   return defineMacroProvider({
-    id: 'ref',
+    id: 'solid-js-macro',
     exports: {
-      'macros/ref': {
-        macros: [refMacro],
+      'solid-js/macro': {
+        macros: [signalMacro],
       },
     },
   });

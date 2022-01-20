@@ -1,5 +1,5 @@
 import type { Component } from 'solid-js';
-import { $signal } from 'macros/ref';
+import { $signal } from 'solid-js/macro';
 
 const App: Component = () => {
   let points = $signal(['val']);
